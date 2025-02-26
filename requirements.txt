@@ -1,0 +1,12 @@
+datasets==2.18.0
+deepspeed==0.14.4
+evaluate==0.4.0
+huggingface_hub==0.28.1
+matplotlib==3.7.1
+nltk==3.8.1
+numpy==1.25.0
+tokenizers==0.21.0
+torch==2.5.1
+tqdm==4.66.4
+transformers==4.48.3
+vllm==0.7.2

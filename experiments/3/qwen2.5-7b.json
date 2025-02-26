@@ -1,0 +1,64 @@
+{
+  "base_directory": "/datadrive2/unmemorize/experiments/3",
+  "experiments": [
+    {
+      "model_name": "qwen2.5-7b",
+      "configurations": [
+        {
+          "config": "10-5-1",
+          "sample_count": 1,
+          "experiment_types": [
+            {
+              "data": "synthetic",
+              "name": "standard",
+              "top_k": 5,
+              "smart_select": false
+            },
+            {
+              "data": "pretrain",
+              "name": "standard",
+              "top_k": 5,
+              "smart_select": false
+            }                            
+          ]
+        },
+        {
+          "config": "10-5-1",
+          "sample_count": 1,
+          "experiment_types": [
+            {
+              "data": "synthetic",
+              "name": "standard",
+              "top_k": 10,
+              "smart_select": false
+            },
+            {
+              "data": "pretrain",
+              "name": "standard",
+              "top_k": 10,
+              "smart_select": false
+            }                            
+          ]
+        },
+        {
+          "config": "10-5-1",
+          "sample_count": 1,
+          "experiment_types": [
+            {
+              "data": "synthetic",
+              "name": "standard",
+              "top_k": 20,
+              "smart_select": false
+            },
+            {
+              "data": "pretrain",
+              "name": "standard",
+              "top_k": 20,
+              "smart_select": false
+            }                            
+          ]
+        }
+      ]
+    }
+  ]
+}
