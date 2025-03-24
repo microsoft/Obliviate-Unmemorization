@@ -1,0 +1,56 @@
+{
+    "llama3.1-8b": {
+      "model_name": "meta-llama/Llama-3.1-8B",
+      "gradient_accumulation_steps": "6",
+      "per_device_batch_size": "2"
+    },
+    "llama3.1-8b-instruct": {
+      "model_name": "meta-llama/Llama-3.1-8B-Instruct",
+      "gradient_accumulation_steps": "6",
+      "per_device_batch_size": "2",
+      "instruct": true
+    },
+    "gemma2-9b": {
+      "model_name": "google/gemma-2-9b",
+      "gradient_accumulation_steps": "1",
+      "per_device_batch_size": "1",
+      "learning_rate": "5e-7"
+    }, 
+    "gemma-7b": {
+      "model_name": "google/gemma-7b",
+      "gradient_accumulation_steps": "1",
+      "per_device_batch_size": "2"
+    },     
+    "qwen2.5-14b": {
+      "model_name": "Qwen/Qwen2.5-14B",
+      "gradient_accumulation_steps": "12",
+      "per_device_batch_size": "1"
+    },
+    "qwen2.5-3b": {
+      "model_name": "Qwen/Qwen2.5-3B",
+      "gradient_accumulation_steps": "6",
+      "per_device_batch_size": "6"
+    },    
+    "qwen2.5-3b-instruct": {
+      "model_name": "Qwen/Qwen2.5-3B-Instruct",
+      "gradient_accumulation_steps": "6",
+      "per_device_batch_size": "6",
+      "instruct": true
+    },        
+    "qwen2.5-7b": {
+      "model_name": "Qwen/Qwen2.5-7B",
+      "gradient_accumulation_steps": "6",
+      "per_device_batch_size": "2"
+    },
+    "qwen2.5-7b-instruct": {
+      "model_name": "Qwen/Qwen2.5-7B-Instruct",
+      "gradient_accumulation_steps": "6",
+      "per_device_batch_size": "2",
+      "instruct": true
+    },        
+    "yi1.5-8b": {
+      "model_name": "01-ai/Yi-1.5-6B",
+      "gradient_accumulation_steps": "6",
+      "per_device_batch_size": "2"
+    }
+  }

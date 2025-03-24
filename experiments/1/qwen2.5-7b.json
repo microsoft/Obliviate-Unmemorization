@@ -1,0 +1,36 @@
+{
+    "base_directory": "/datadrive2/unmemorize/experiments/1",
+    "experiments": [
+      {
+        "model_name": "qwen2.5-7b",
+        "configurations": [
+          {
+            "config": "10-5-1",
+            "sample_count": 10,
+            "experiment_types": [
+              {
+                "data": "synthetic",
+                "name": "standard",
+                "smart_select": false
+              },
+              {
+                "data": "synthetic",
+                "name": "smart",
+                "smart_select": true
+              },              
+              {
+                "data": "pretrain",
+                "name": "standard",
+                "smart_select": false
+              },
+              {
+                "data": "pretrain",
+                "name": "smart",
+                "smart_select": true
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }

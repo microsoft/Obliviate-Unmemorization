@@ -1,0 +1,7 @@
+{
+    "model_name": "qwen2.5-7b",
+    "base_directory": "/datadrive2/unmemorize/experiments",
+    "synthetic_dataset": "data/synthetic",
+    "pretrain_dataset": "data/organic",
+    "sample_count": 10
+  }
