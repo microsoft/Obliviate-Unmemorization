@@ -1,0 +1,62 @@
+{
+    "base_directory": "/datadrive2/unmemorize/experiments/7",
+    "experiments": [
+      {
+        "model_name": "llama3.1-8b",
+        "configurations": [
+          {
+            "config": "10-4-1",
+            "sample_count": 100,
+            "experiment_types": [
+              {
+                "data": "synthetic",
+                "name": "kl",
+                "top_k": 10,
+                "smart_select": true,
+                "loss_type": "kl"
+              }                        
+            ]
+          },          
+          {
+            "config": "10-4-1",
+            "sample_count": 10,
+            "experiment_types": [
+              {
+                "data": "pretrain",
+                "name": "kl",
+                "top_k": 10,
+                "smart_select": true,
+                "loss_type": "kl"
+              }                            
+            ]
+          },
+          {
+            "config": "10-4-1",
+            "sample_count": 100,
+            "experiment_types": [
+              {
+                "data": "synthetic",
+                "name": "combined",
+                "top_k": 10,
+                "smart_select": true,
+                "loss_type": "combined"
+              }                        
+            ]
+          },          
+          {
+            "config": "10-4-1",
+            "sample_count": 10,
+            "experiment_types": [
+              {
+                "data": "pretrain",
+                "name": "combined",
+                "top_k": 10,
+                "smart_select": true,
+                "loss_type": "combined"
+              }                            
+            ]
+          }          
+        ]
+      }
+    ]
+  }

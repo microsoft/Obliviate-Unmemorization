@@ -2,14 +2,14 @@ import os
 import torch
 import argparse
 
-lm_eval_tasks = "hellaswag,winogrande,openbookqa,boolq,arc_challenge"
+lm_eval_tasks = "mmlu,winogrande,truthfulqa,hellaswag"
 
 
 
 def run_benchmark( logging_folder, model_folder, overwrite=True ):
     # get the number of GPUs using torch
     num_gpus = torch.cuda.device_count()
-    commandLine = f"accelerate launch --config_file config/accelerate/accelerate_benchmark_config{num_gpus}.yaml -m lm_eval --trust_remote_code"
+    commandLine = f"accelerate launch --config_file ../config/accelerate/accelerate_benchmark_config{num_gpus}.yaml -m lm_eval --trust_remote_code"
     commandLine += f" --tasks {lm_eval_tasks}"
     commandLine += f" --model_args pretrained={model_folder},trust_remote_code=True"
 

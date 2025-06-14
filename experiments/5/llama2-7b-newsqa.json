@@ -1,0 +1,44 @@
+{
+  "base_directory": "/datadrive2/unmemorize/experiments/5",
+  "experiments": [
+    {
+      "model_name": "llama2-7b-newsqa",
+      "configurations": [
+        {
+          "config": "10-4-1",
+          "sample_count": 1000,
+          "experiment_types": [
+            {
+              "data": "newsqa",
+              "name": "stride",
+              "smart_select": true,
+              "smart_stride": true
+            }                            
+          ]
+        },        
+        {
+          "config": "10-4-1",
+          "sample_count": 1000,
+          "experiment_types": [
+            {
+              "data": "newsqa",
+              "name": "smart",
+              "smart_select": true
+            }                            
+          ]
+        },
+        {
+          "config": "10-4-1",
+          "sample_count": 1000,
+          "experiment_types": [
+            {
+              "data": "newsqa",
+              "name": "standard",
+              "smart_select": false
+            }
+          ]
+        }       
+     ]
+    }
+  ]
+}

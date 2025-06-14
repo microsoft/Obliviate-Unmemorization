@@ -5,56 +5,56 @@
       "model_name": "qwen2.5-7b",
       "configurations": [
         {
-          "config": "10-5-1",
-          "sample_count": 1,
+          "config": "10-4-1",
+          "sample_count": 10,
           "experiment_types": [
             {
               "data": "synthetic",
-              "name": "standard",
+              "name": "smart",
               "top_k": 5,
-              "smart_select": false
+              "smart_select": true
             },
             {
               "data": "pretrain",
-              "name": "standard",
+              "name": "smart",
               "top_k": 5,
-              "smart_select": false
+              "smart_select": true
             }                            
           ]
         },
         {
-          "config": "10-5-1",
-          "sample_count": 1,
+          "config": "10-4-1",
+          "sample_count": 10,
           "experiment_types": [
             {
               "data": "synthetic",
-              "name": "standard",
+              "name": "smart",
               "top_k": 10,
-              "smart_select": false
+              "smart_select": true
             },
             {
               "data": "pretrain",
-              "name": "standard",
+              "name": "smart",
               "top_k": 10,
-              "smart_select": false
+              "smart_select": true
             }                            
           ]
         },
         {
-          "config": "10-5-1",
-          "sample_count": 1,
+          "config": "10-4-1",
+          "sample_count": 10,
           "experiment_types": [
             {
               "data": "synthetic",
-              "name": "standard",
+              "name": "smart",
               "top_k": 20,
-              "smart_select": false
+              "smart_select": true
             },
             {
               "data": "pretrain",
-              "name": "standard",
+              "name": "smart",
               "top_k": 20,
-              "smart_select": false
+              "smart_select": true
             }                            
           ]
         }

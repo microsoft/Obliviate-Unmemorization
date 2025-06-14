@@ -1,12 +1,59 @@
 from torch.utils.data import Dataset
 import torch
 import json
+import math
 import re
+import string
 import torch.nn.functional as F
 from tokenizers import pre_tokenizers, Regex
 
 INSTRUCT_PROMPT = "Generate the entire rest of this text, continuing until you reach the end: "
 INSTRUCT_PROMPT_PREFIX = 15
+
+TARGET_LOSS_MULTIPLIER = 1
+
+def is_spacing_or_punctuation(token):
+    """
+    Check if a token is spacing (including zero-width) or punctuation (including bullets and dashes).
+    """
+    if not token:
+        return True
+    
+    # Check for whitespace (including newlines, tabs, etc.)
+    if token.isspace():
+        return True
+    
+    # Check for zero-width characters
+    zero_width_chars = {
+        '\u200b',  # Zero Width Space
+        '\u200c',  # Zero Width Non-Joiner
+        '\u200d',  # Zero Width Joiner
+        '\u2060',  # Word Joiner
+        '\ufeff',  # Zero Width No-Break Space
+    }
+    if any(char in token for char in zero_width_chars):
+        return True
+    
+    # Check for punctuation (including standard and extended)
+    # Standard punctuation
+    if any(char in string.punctuation for char in token):
+        return True
+    
+    # Extended punctuation including bullets and special dashes
+    extended_punctuation = {
+        '•', '‣', '◦', '▪', '▫', '‰', '‱',  # Bullets and special symbols
+        '–', '—', '―', '‒',  # Various dashes
+        ''', ''', '"', '"', '…',  # Smart quotes and ellipsis
+        '¡', '¿', '§', '¶', '†', '‡',  # Additional punctuation
+    }
+    if any(char in token for char in extended_punctuation):
+        return True
+    
+    # Check if token contains only punctuation/spacing characters
+    if token.strip() == '':
+        return True
+    
+    return False
 
 class CustomDataset(Dataset):
 
@@ -18,7 +65,12 @@ class CustomDataset(Dataset):
                  max_length=512, instruct=False):
         self.dataset = dataset
         self.tokenizer = tokenizer
-        self.model = model
+        if hasattr(model, 'to') and callable(getattr(model, 'to')):
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            self.model = model.to(device)
+        else:
+            # If it's an LLM or another object without a 'to' method, use as is
+            self.model = model
         self.max_length = max_length
         self.instruct = instruct
         
@@ -166,7 +218,7 @@ class CustomDataset(Dataset):
                 self.encoded_answers.append(encoded_a)
                 
     def _get_target_logits(self):
-        BATCH_SIZE = 32
+        BATCH_SIZE = 24
         total_samples = len(self.encoded_articles['input_ids'])
         num_batches = (total_samples + BATCH_SIZE - 1) // BATCH_SIZE
 
@@ -196,16 +248,23 @@ class CustomDataset(Dataset):
             
             return orig_is_upper == new_is_upper
         
+        device = next(self.model.parameters()).device if hasattr(self.model, 'parameters') else 'cpu'
+        
         for batch_idx in range(num_batches):
             start_idx = batch_idx * BATCH_SIZE
             end_idx = min((batch_idx + 1) * BATCH_SIZE, total_samples)
 
+            # Move the batch tensors to the correct device
+            batch_input_ids = self.encoded_articles['input_ids'][start_idx:end_idx].to(device)
+            batch_attention_mask = self.encoded_articles['attention_mask'][start_idx:end_idx].to(device)
+            batch_labels = self.encoded_articles['input_ids'][start_idx:end_idx].to(device)
+
             with torch.no_grad():
                 outputs = self.model(
-                    input_ids=self.encoded_articles['input_ids'][start_idx:end_idx],
-                    attention_mask=self.encoded_articles['attention_mask'][start_idx:end_idx],
-                    labels=self.encoded_articles['input_ids'][start_idx:end_idx],
-                )            
+                    input_ids=batch_input_ids,
+                    attention_mask=batch_attention_mask,
+                    labels=batch_labels,
+                )    
                 
             for batch_index in range(start_idx, end_idx):
                 local_index = batch_index - start_idx
@@ -225,7 +284,7 @@ class CustomDataset(Dataset):
                         requires_space = original_token_text.startswith(' ') or original_token_text.startswith('-')
                         
                         # Get more tokens than we need initially to allow for filtering
-                        k = min(6 * self.unmemorize_top_k, len(response_probs))  # Increased for additional capitalization filtering
+                        k = min(6 * self.unmemorize_top_k, len(response_probs))  # Increased for additional filtering
                         top_probs, top_tokens = torch.topk(response_probs, k=k)
                         
                         # Filter out article token and get valid tokens
@@ -246,10 +305,18 @@ class CustomDataset(Dataset):
                                     if token in skip_tokens:
                                         continue
                                 
+                                # Skip all spacing and punctuation for smart_select
+                                if is_spacing_or_punctuation(token_text):
+                                    continue
+                                
                                 # Check space requirement
                                 if requires_space:
                                     if not (token_text.startswith(' ') or token_text.startswith('-')):
                                         continue
+                                    
+                                # if original is whitespace or newline, must pick a non-whitespace token or newline
+                                if original_token_text.isspace() and not (token_text.isspace() or token_text == '\n'):
+                                    continue
                                 
                                 # Check capitalization
                                 if not matches_capitalization(original_token_text, token_text):
@@ -261,6 +328,7 @@ class CustomDataset(Dataset):
                         
                         # If we don't have enough tokens, get more from the distribution
                         while len(valid_indices) < self.unmemorize_top_k:
+                            
                             k = min(len(response_probs), k + self.unmemorize_top_k)
                             top_probs, top_tokens = torch.topk(response_probs, k=k)
                             
@@ -270,12 +338,14 @@ class CustomDataset(Dataset):
                                 token_text = self.tokenizer.decode([token])
                                 
                                 if token != article_token:
-                                    # Apply both space and capitalization requirements
-                                    if requires_space:
-                                        if not (token_text.startswith(' ') or token_text.startswith('-')):
+                                    if self.unmemorize_smart_select == True:
+
+                                        # Apply both space and capitalization requirements
+                                        if requires_space:
+                                            if not (token_text.startswith(' ') or token_text.startswith('-')):
+                                                continue
+                                        if not matches_capitalization(original_token_text, token_text):
                                             continue
-                                    if not matches_capitalization(original_token_text, token_text):
-                                        continue
                                     valid_indices.append(j)
                                     if len(valid_indices) >= self.unmemorize_top_k:
                                         break
@@ -311,8 +381,9 @@ class CustomDataset(Dataset):
     def _find_valid_word_token(self, encoding, word_ids, word_index, outputs):
         while word_index > 0:
             _, token, _ = self._get_token_info(encoding, word_index, outputs)
-            # Check if token is start of word (not punctuation/space)  
-            if not re.match(r'^[^\w\s]', token[0]):
+            # Check if token is start of word (not punctuation/space)
+            # Handle empty tokens gracefully
+            if token and not re.match(r'^[^\w\s]', token[0]):
                 word_id = word_ids[word_index]
                 # And check we're at start of word
                 if word_index == 0 or word_ids[word_index-1] != word_id:
@@ -369,77 +440,95 @@ class CustomDataset(Dataset):
         return word_ids
             
     def _apply_unmemorize(self):
+        """
+        Build `self.encoded_articles['unmemorize_mask']`, ensuring that we never pick
+        punctuation/space tokens for unmemorization. Modified to only search forward
+        from the current position, not backward.
+        """
         self.encoded_articles['unmemorize_mask'] = []
         self.encoded_articles['article_unmemorize_ids'] = []
 
-        for _, (encoded_article, attention_mask) in enumerate(zip(self.encoded_articles['input_ids'], 
-                                                                self.encoded_articles['attention_mask'])):
+        for encoded_article, attention_mask, answer_index in zip(
+            self.encoded_articles['input_ids'],
+            self.encoded_articles['attention_mask'],
+            self.answer_index
+        ):
+            
+            # Move each to the correct device
+            encoded_article = encoded_article.to(self.model.device)
+            attention_mask = attention_mask.to(self.model.device)
 
-            # get probability of each token
+            # Do a single‐sample forward to get logits/probs
             with torch.no_grad():
-                outputs = self.model(input_ids=encoded_article.unsqueeze(0), 
-                            attention_mask=attention_mask.unsqueeze(0), 
-                            labels=encoded_article.unsqueeze(0))
-            
-            # initialize the unmemorize mask to all 0s
+                outputs = self.model(
+                    input_ids=encoded_article.unsqueeze(0),
+                    attention_mask=attention_mask.unsqueeze(0),
+                    labels=encoded_article.unsqueeze(0)
+                )
+
+            # Initialize mask to zeros
             unmemorize_mask = torch.zeros_like(attention_mask)
-            
-            decoded_text = self.tokenizer.decode(encoded_article)
-            encoding_ids = self.tokenizer(decoded_text, return_offsets_mapping=True)
-            api_word_ids = encoding_ids.word_ids()
 
-            # Get the offset mapping
-            encoding = self.encoded_articles['input_ids'][0]
-            word_ids = self._create_word_ids(encoding)
-            
-            # Find the first non-zero element in the attention mask and skip the
-            # [CLS] token
-            start_index = (attention_mask != 0).nonzero(as_tuple=True)[0][0].item()+1
-            
+            # Figure out where the real tokens start (skip any initial padding or special tokens)
+            # We skip index 0 because it's usually [CLS] or similar
+            start_index = (attention_mask != 0).nonzero(as_tuple=True)[0][0].item() + 1
+
+            # skip prompt 
+            start_index += answer_index
+
+            # Our "raw" index where we attempt the first unmemorize
             index = start_index + self.unmemorize_start
-            while index < len(encoded_article) and attention_mask[index] != 0:
-                
-                span_index = 0
-                while span_index < self.unmemorize_span:
-                    word_index = index 
-                    word_id = word_ids[index]
-                    
-                    if self.unmemorize_smart_stride == True:
+            L = len(encoded_article)
 
-                        # Find a suitable word to unmemorize
-                        found_unmemorize = False
-                        while found_unmemorize == False:                        
-                            found_unmemorize = True
-                            
-                            # skip the special tokens
-                            word_index = self._find_valid_word_token(encoding, word_ids, word_index, outputs)
-                            _, token, prob = self._get_token_info(encoding, word_index, outputs)
-                            
+            while index < L and attention_mask[index] != 0:
+                old_index = index
+                span_counter = 0
+                chosen_spot = None
 
-                            # can't unmemorize tokens that have a probability of 1.0
-                            if prob == 1.0:
-                                word_index -= 1
-                                word_id = word_ids[word_index]
-                                found_unmemorize = False
+                # We will attempt up to unmemorize_span tokens "in this window",
+                # each time skipping punctuation/spacing until we find a valid token.
+                while span_counter < self.unmemorize_span and index < L and attention_mask[index] != 0:
+                    # We start with a candidate = index
+                    candidate = index
+                    found_valid = False
+
+                    # Only search forward from the current candidate position
+                    while candidate < L and attention_mask[candidate] != 0:
+                        token_id, token_text, prob = self._get_token_info(encoded_article, candidate, outputs)
+                        txt = token_text.strip()
+                        if (not token_text) or (prob == 1.0) or is_spacing_or_punctuation(token_text) or txt.isdigit():
+                            candidate += 1
+                            continue
+                        # Otherwise, we found a valid token
+                        found_valid = True
+                        break
+
+                    if found_valid:
+                        # Mark this candidate for unmemorization
+                        unmemorize_mask[candidate] = 1
+                        chosen_spot = candidate
+                        span_counter += 1
+                        # Move index forward by 1, so if span>1 we look "just after" this candidate next
+                        index = candidate + 1
                     else:
-                        _, token, _ = self._get_token_info(encoding, word_index, outputs)
+                        # No valid token found: abort this span
+                        break
 
-                    # Set the unmemorize mask
-                    unmemorize_mask[word_index] = 1
-                    
-                    # Move to the next span position
-                    span_index += 1
-                    index = min(index + span_index, len(encoded_article))
-                    
-                # Move to the next stride sposition
-                index = min(index + self.unmemorize_stride, len(encoded_article))
-            
-            # Add the unmemorize mask and article_unmemorize_ids for this article
+                # After finishing this span, if we did choose something, jump to chosen_spot + stride;
+                # otherwise jump from original index + stride.
+                if chosen_spot is not None:
+                    next_index = chosen_spot + self.unmemorize_stride + 1
+                    # If that somehow goes backwards, force at least old_index+1
+                    index = max(next_index, old_index + 1)
+                else:
+                    index = old_index + self.unmemorize_stride + 1 
+
+            # Append this article's mask
             self.encoded_articles['unmemorize_mask'].append(unmemorize_mask)
 
-        # Convert lists to tensors
+        # Stack them into a tensor of shape [num_articles, seq_len]
         self.encoded_articles['unmemorize_mask'] = torch.stack(self.encoded_articles['unmemorize_mask'])
-
+        
     def tokenized_article(self, idx):
         return self.tokenized_articles[idx]
     
@@ -537,8 +626,149 @@ def get_unmemorize_probabilities(logits, labels, attention_mask, unmemorize_mask
         )
     
     return result_probabilities
+
+def get_adaptive_scaling_factor(logger, num_samples, min_scale=1.0, max_scale=3.0, 
+                               ref_small=100, ref_large=1000, power=1.0):
+    """
+    Calculate adaptive scaling factor based on dataset size.
+    
+    Args:
+        num_samples: Number of samples in the dataset
+        min_scale: Minimum scaling factor (for small datasets)
+        max_scale: Maximum scaling factor (upper limit)
+        ref_small: Reference size for small datasets
+        ref_large: Reference size for large datasets
+        power: Power factor to adjust curve shape (1.0=linear, >1=slower growth)
+    
+    Returns:
+        Scaling factor for the loss
+    """
+    
+    return 1
+    
+    # For small datasets, use min_scale
+    if num_samples <= ref_small:
+        return min_scale
+    
+    # For extremely large datasets, cap at ref_large * 10 to prevent excessive scaling
+    effective_samples = min(num_samples, ref_large * 10)
+    
+    # Normalized position using logarithmic scale
+    log_samples = math.log(effective_samples)
+    log_small = math.log(ref_small)
+    log_large = math.log(ref_large)
+    
+    # Calculate normalized position in log space
+    normalized_position = (log_samples - log_small) / (log_large - log_small)
+    
+    # Apply power adjustment for non-linear scaling and clamp to [0, 1]
+    normalized_position = min(1.0, normalized_position) ** power
+    
+    # Linear interpolation between min_scale and max_scale
+    scale_factor = min_scale + normalized_position * (max_scale - min_scale)
+    
+    return scale_factor
+
+
+def calculate_target_loss(logger, model, tokenizer, outputs, labels, attention_mask, unmemorize_mask, debug=False):
+    # Constants for loss calculation
+    EPSILON = 1e-9
+    TARGET_LOSS_EXPONENT = 2   # Keep the same as before
+    TARGET_PROB_THRESHOLD = 1e-4  # Keep the same as before
+    BARRIER_WEIGHT = 0.4  # Keep the same as before
+    THRESHOLD_WEIGHT = 0.000615  # Reduced from 0.6 to prevent explosion
+
+    # Get logits and shift tensors
+    logits = outputs[..., :-1, :].contiguous()  # Shape: [batch_size, seq_len-1, vocab_size]
+    shift_labels = labels[..., 1:].contiguous()
+    shift_attention_mask = attention_mask[..., 1:].contiguous()
+    shift_unmemorize_mask = unmemorize_mask[..., 1:].contiguous()
+
+    # Apply softmax to get probabilities
+    batch_size = logits.size(0)
+    probabilities = torch.softmax(logits, dim=2)
+
+    # Track total loss and number of unmemorize tokens
+    total_loss = 0.0 
+    unmemorize_token_count = 0
+    
+    # Track statistics for debugging
+    if debug:
+        all_target_probs = []
+        all_losses = []
+
+    for batch_idx in range(batch_size):
+        # Find where the actual sequence starts (first 1 in attention mask)
+        valid_tokens = shift_attention_mask[batch_idx].nonzero().squeeze(-1)
+        if len(valid_tokens) == 0:
+            continue
+
+        # Process only the valid token positions
+        for pos in valid_tokens:
+            # Only focus on tokens marked for unmemorization
+            if shift_unmemorize_mask[batch_idx, pos] == 1:
+                # Get the target token for this position
+                target_token = shift_labels[batch_idx, pos]
+                # Get the probability of the target token
+                pred_probs = probabilities[batch_idx, pos]
+                target_prob = pred_probs[target_token]
+                
+                if debug:
+                    all_target_probs.append(target_prob.item())
+
+                # Calculate the combined loss
+                # 1. Barrier component: penalizes as prob approaches 1
+                barrier_component = (-torch.log(1 - target_prob + EPSILON)) ** TARGET_LOSS_EXPONENT
+                
+                # 2. Threshold component: directly targets specific threshold
+                if target_prob > TARGET_PROB_THRESHOLD:
+                    ratio = target_prob / TARGET_PROB_THRESHOLD
+                    threshold_component = torch.log(ratio + EPSILON) * ratio
+                else:
+                    # Small reward for being under threshold (optional)
+                    threshold_component = torch.tensor(0.0, device=logits.device)
+                
+                # Combine the components with weighting
+                current_token_loss = (BARRIER_WEIGHT * barrier_component + 
+                                      THRESHOLD_WEIGHT * threshold_component)
+                
+                total_loss += current_token_loss
+                unmemorize_token_count += 1
+
+    # Calculate average loss
+    if unmemorize_token_count > 0: 
+        target_loss = total_loss / unmemorize_token_count
+    else:
+        target_loss = torch.tensor(0.0, device=logits.device) 
+
+    if debug:
+        logger.info(f"Target Loss: {target_loss.item() if isinstance(target_loss, torch.Tensor) else target_loss}")
+        if all_target_probs:
+            logger.info(f"Target Probabilities: min={min(all_target_probs):.6f}, " 
+                        f"max={max(all_target_probs):.6f}, "
+                        f"mean={sum(all_target_probs)/len(all_target_probs):.6f}")
+            logger.info(f"Tokens above threshold: {sum(1 for p in all_target_probs if p > TARGET_PROB_THRESHOLD)} "
+                        f"of {len(all_target_probs)} ({sum(1 for p in all_target_probs if p > TARGET_PROB_THRESHOLD)/len(all_target_probs)*100:.1f}%)")
+            
+            # Log distribution of probabilities for better insights
+            prob_buckets = [0] * 6  # [<1e-6, <1e-5, <1e-4, <1e-3, <1e-2, >=1e-2]
+            for p in all_target_probs:
+                if p < 1e-6: prob_buckets[0] += 1
+                elif p < 1e-5: prob_buckets[1] += 1
+                elif p < 1e-4: prob_buckets[2] += 1
+                elif p < 1e-3: prob_buckets[3] += 1
+                elif p < 1e-2: prob_buckets[4] += 1
+                else: prob_buckets[5] += 1
+                
+            bucket_names = ["<1e-6", "<1e-5", "<1e-4", "<1e-3", "<1e-2", ">=1e-2"]
+            for i, (name, count) in enumerate(zip(bucket_names, prob_buckets)):
+                logger.info(f"  {name}: {count} tokens ({count/len(all_target_probs)*100:.1f}%)")
+    
+    return target_loss 
+
         
-def calculate_kl_loss(logger, model, tokenizer, outputs, labels, attention_mask, target_logits, unmemorize_mask, debug = False):
+def calculate_kl_loss(logger, model, tokenizer, num_samples, 
+                      outputs, labels, attention_mask, target_logits, unmemorize_mask, debug = False):
     logits = outputs[..., :-1, :].contiguous()  # Shape: [batch_size, seq_len-1, vocab_size]
     shift_labels = labels[..., 1:].contiguous()       
     shift_attention_mask = attention_mask[..., 1:].contiguous()
@@ -567,24 +797,46 @@ def calculate_kl_loss(logger, model, tokenizer, outputs, labels, attention_mask,
             # Construct the vectors for this batch index
             top_tokens = torch.tensor([tensor[batch_idx].item() for tensor in top_tokens_tensor], device=model.device)
             top_probs = torch.tensor([tensor[batch_idx].item() for tensor in top_probs_tensor], 
-                                            device=model.device, dtype=pred_probs.dtype)            
+                                      device=model.device, dtype=pred_probs.dtype)            
             # Create target distribution tensor
             target_dist = torch.zeros_like(pred_probs)
             target_dist[top_tokens] = top_probs.clone().detach()
 
             if debug == True and batch_idx == 0 and pos.item()-valid_tokens[0]:
-                # get top predicted token 
-                top_pred_token = torch.argmax(pred_probs)
+                # Get top 5 predicted tokens and their probabilities
+                top5_pred_values, top5_pred_indices = torch.topk(pred_probs, min(5, len(pred_probs)))
+                top5_pred_tokens = [tokenizer.decode([idx.item()]) for idx in top5_pred_indices]
                 
-                # get top target token
-                top_target_token = top_tokens[0]
+                # Get top 5 target tokens and their probabilities
+                top5_target_indices = top_tokens[:min(5, len(top_tokens))]
+                top5_target_values = top_probs[:min(5, len(top_probs))]
+                top5_target_tokens = [tokenizer.decode([idx.item()]) for idx in top5_target_indices]
                 
-                if top_pred_token == top_target_token:
-                    logger.info(f"{pos.item()-valid_tokens[0]-1}: {tokenizer.decode([top_pred_token])}")
-                else:
-                    logger.info(f"{pos.item()-valid_tokens[0]-1}: *** {tokenizer.decode([top_pred_token])} vs {tokenizer.decode([top_target_token])}")
+                # Print position
+                logger.info(f"Position {pos.item()-valid_tokens[0]}:")
+                
+                # Print headers
+                logger.info(f"{'TARGET TOKENS':<15} {'PROB':<8} | {'PREDICTED TOKENS':<15} {'PROB':<8}")
+                logger.info("-" * 50)
+                
+                # Print top 5 tokens side by side
+                for i in range(max(len(top5_target_tokens), len(top5_pred_tokens))):
+                    target_token = top5_target_tokens[i] if i < len(top5_target_tokens) else ""
+                    target_prob = f"{top5_target_values[i].item():.4f}" if i < len(top5_target_values) else ""
+                    pred_token = top5_pred_tokens[i] if i < len(top5_pred_tokens) else ""
+                    pred_prob = f"{top5_pred_values[i].item():.4f}" if i < len(top5_pred_values) else ""
+                    
+                    logger.info(f"{target_token:<15} {target_prob:<8} | {pred_token:<15} {pred_prob:<8}")
+                
+                # Highlight match or mismatch for the top token
+                if len(top5_pred_indices) > 0 and len(top5_target_indices) > 0:
+                    if top5_pred_indices[0] == top5_target_indices[0]:
+                        logger.info(f"✓ Top tokens match: {top5_pred_tokens[0]}")
+                    else:
+                        logger.info(f"✗ Top tokens differ: Target={top5_target_tokens[0]} vs Predicted={top5_pred_tokens[0]}")
 
-            # Calculate KL divergence for this position
+            # Always calculate KL divergence for all positions, including unmemorize tokens
+            # This properly pushes the model toward the target distribution
             if pos.item()-valid_tokens[0]:
                 token_kl = F.kl_div(
                     torch.log(pred_probs + 1e-10),  # Add small epsilon to avoid log(0)
@@ -593,33 +845,19 @@ def calculate_kl_loss(logger, model, tokenizer, outputs, labels, attention_mask,
                 )
             else:
                 token_kl = 0.0
-                            
-            # get probabilities of label ids for unmemorize mask tokens 
+                
+            # Add debug information for unmemorize tokens
             if shift_unmemorize_mask[batch_idx, pos] == 1:
-                # Get predicted probability for the target token
+                # Get predicted probability for the target token for debugging only
                 target_token = shift_labels[batch_idx, pos]
                 target_prob = pred_probs[target_token]
-                
-                # Add negative log probability to KL loss
-                token_kl = target_prob * 100
-                
-                # if the target probability is less than 0.01, no need
-                # to push it further down
-                if target_prob < 0.01:
-                    token_kl = 0
-                    
-                # if target prob is 1.0, then leave it since it won't budge
-                if target_prob == 1.0:
-                    if debug == True:
-                        logger.info(f"   [{pos-1}] Target Prob is 1.0 - skipping")
-                    token_kl = 0
 
                 if debug == True and batch_idx == 0 and pos.item()-valid_tokens[0]:
-                    logger.info(f"   Unmemorize Loss: {token_kl}")                
-
+                    logger.info(f"   Unmemorize KL Loss: {token_kl}")
+                    logger.info(f"   Current target token prob: {target_prob:.6f}")
             else:
                 if debug == True and batch_idx == 0 and pos.item()-valid_tokens[0]:
-                    logger.info(f"   Loss: {token_kl}")                
+                    logger.info(f"   Standard KL Loss: {token_kl}")                
             
             total_kl_loss += token_kl
             target_logit_idx += 1
@@ -629,6 +867,15 @@ def calculate_kl_loss(logger, model, tokenizer, outputs, labels, attention_mask,
     if total_tokens > 0:
         total_kl_loss = total_kl_loss / total_tokens
     
+    scale_factor = get_adaptive_scaling_factor(logger, num_samples)
+    total_kl_loss = total_kl_loss * scale_factor
     if debug == True:            
-        logger.info(f"   Total Unmemorize Loss: {total_kl_loss}")                      
+        logger.info(f"Total KL Loss (scale {scale_factor}): {total_kl_loss}")                 
     return total_kl_loss
+
+
+def calculate_combined_loss( kl_loss, target_loss):
+    
+    # Combine KL loss and target loss
+    combined_loss = kl_loss + TARGET_LOSS_MULTIPLIER * target_loss
+    return combined_loss

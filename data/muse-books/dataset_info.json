@@ -1,0 +1,38 @@
+{
+  "builder_name": "parquet",
+  "citation": "",
+  "config_name": "verbmem",
+  "dataset_name": "muse-books",
+  "dataset_size": 417969,
+  "description": "",
+  "download_checksums": {
+    "hf://datasets/muse-bench/MUSE-Books@051ba90319e920d410d87cfdbd61f25843c1b892/verbmem/forget-00000-of-00001.parquet": {
+      "num_bytes": 283251,
+      "checksum": null
+    }
+  },
+  "download_size": 283251,
+  "features": {
+    "article": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 701220,
+  "splits": {
+    "forget": {
+      "name": "forget",
+      "num_bytes": 417969,
+      "num_examples": 100,
+      "dataset_name": "muse-books"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}

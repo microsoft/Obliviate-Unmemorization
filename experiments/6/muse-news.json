@@ -1,0 +1,22 @@
+{
+  "base_directory": "/datadrive2/unmemorize/experiments/6",
+  "experiments": [
+    {
+      "model_name": "muse-news_target",
+      "configurations": [
+        {
+          "config": "10-4-1",
+          "sample_count": 3000,
+          "experiment_types": [
+            {
+              "data": "muse-news",
+              "name": "smart",
+              "smart_select": true,
+              "smart_stride": true
+            }                            
+          ]
+        }
+     ]
+    }
+  ]
+}

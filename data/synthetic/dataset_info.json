@@ -2,15 +2,7 @@
   "citation": "",
   "description": "",
   "features": {
-    "topic": {
-      "dtype": "string",
-      "_type": "Value"
-    },
     "article": {
-      "dtype": "string",
-      "_type": "Value"
-    },
-    "mcq_questions": {
       "dtype": "string",
       "_type": "Value"
     }

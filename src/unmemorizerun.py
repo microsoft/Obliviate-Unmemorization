@@ -38,6 +38,12 @@ def parse_arguments():
     parser.add_argument("--smart_select", action="store_true", help="Find good tokens.")
     parser.add_argument("--unmemorize_sample_count", type=int, default=-1, help="Number of samples to memorize.")
     parser.add_argument("--top_k", type=int, default=10, help="Top k tokens for k/l loss.")
+    parser.add_argument("--loss_type", type=str, default=None, choices=[None, "kl", "combined"], help="Loss type to use for unmemorization.")
+
+    # multi GPU node configs
+    parser.add_argument("--accelerate_run_config", type=str, default=None, help="Accelerate config file.")
+    parser.add_argument("--accelerate_benchmark_config", type=str, default=None, help="Accelerate config path.")
+
     args = parser.parse_args()
 
     # if any steps are explicitly listed, only those steps are run. First check if any 
@@ -77,7 +83,7 @@ def should_run_unmemorize(model_dir: str, force_fresh: bool) -> bool:
         return True
     return not os.path.exists(config_path)
 
-def run_memorize( model_name, model_config, logging_folder, model_folder, dataset, sample_count ):
+def run_memorize( model_name, model_config, logging_folder, model_folder, dataset, sample_count, accelerate_config_path=None ):
     
     # if there's a config.json file in the model folder, then we don't need to memorize
     if os.path.exists(os.path.join(model_folder, "config.json")):
@@ -89,7 +95,12 @@ def run_memorize( model_name, model_config, logging_folder, model_folder, datase
     if os.path.exists(logfile):
         os.remove(logfile)
         
-    commandLine = "accelerate launch src/finetune.py"
+    commandLine = "accelerate launch"
+    
+    if accelerate_config_path is not None:
+        commandLine += f" --config_file {accelerate_config_path}"
+    
+    commandLine += " src/finetune.py"
     
     # add the model name
     commandLine += " --model_name " + model_name
@@ -117,19 +128,26 @@ def run_memorize( model_name, model_config, logging_folder, model_folder, datase
 
 def run_unmemorize(model_name, model_config, logging_folder, model_folder,
                    dataset, start, stride, span, smart_stride, smart_select, sample_count,
-                   top_k ):
+                   top_k, loss_type=None, accelerate_config_path=None):
     
     # delete the log
     logfile = logging_folder + "/unmemorize.log"
     if os.path.exists(logfile):
         os.remove(logfile)
     
-    commandLine = "accelerate launch src/finetune.py"
+    commandLine = "accelerate launch"
+
+    if accelerate_config_path is not None:
+        commandLine += f" --config_file {accelerate_config_path}"
+
+    commandLine += " src/finetune.py"
     
     # add the model name
     commandLine += " --model_name " + model_name
     if model_config.get("instruct", None) is not None:
         commandLine += " --instruct" 
+    if model_config.get("tokenizer", None) is not None:
+        commandLine += " --tokenizer_name " + model_config["tokenizer"]
     commandLine += " --logfile " + logfile
     commandLine += " --output_dir " + model_folder
         
@@ -156,6 +174,10 @@ def run_unmemorize(model_name, model_config, logging_folder, model_folder,
     commandLine += f" --unmemorize_sample_count {sample_count}"
     commandLine += f" --unmemorize_top_k {top_k}"
     
+    # add loss_type parameter if provided
+    if loss_type is not None:
+        commandLine += f" --loss_type {loss_type}"
+    
     # run the command line and return False if it fails
     result = os.system(commandLine)
     if result != 0:
@@ -166,7 +188,7 @@ def run_unmemorize(model_name, model_config, logging_folder, model_folder,
 def run_test( model_name, logging_folder, dataset, sample_count, instruct, runMIA=False ):
 
     # if test.log doesn't exists, execute the tests 
-    if os.path.exists(logging_folder + "/test.log"):
+    if os.path.exists(logging_folder + "/test.json"):
         print("Test already exists. Skipping test.")
     else:    
 
@@ -183,7 +205,7 @@ def run_test( model_name, logging_folder, dataset, sample_count, instruct, runMI
         if result != 0:
             return False  
 
-    if os.path.exists(logging_folder + "/test_greedy.log"):
+    if os.path.exists(logging_folder + "/test-greedy.json"):
         print("Test greedy already exists. Skipping test.")
     else:
         # run rest of tests
@@ -203,7 +225,7 @@ def run_test( model_name, logging_folder, dataset, sample_count, instruct, runMI
             return False
     return True
 
-def run_benchmark( model_name, logging_folder ):
+def run_benchmark( model_name, logging_folder, accelerate_config_path=None ):
     
     # if benchmark.log exists, then we don't need to run the benchmark
     if os.path.exists(logging_folder + "/benchmark.log"):
@@ -212,7 +234,11 @@ def run_benchmark( model_name, logging_folder ):
     
     # get the number of GPUs using torch
     num_gpus = torch.cuda.device_count()
-    commandLine = f"accelerate launch --config_file config/accelerate/accelerate_benchmark_config{num_gpus}.yaml -m lm_eval --trust_remote_code"
+    if accelerate_config_path is not None:
+        commandLine = f"accelerate launch --config_file {accelerate_config_path}"
+    else: 
+        commandLine = f"accelerate launch --config_file config/accelerate/accelerate_benchmark_config{num_gpus}.yaml"
+    commandLine += " -m lm_eval --trust_remote_code"
     commandLine += f" --tasks {lm_eval_tasks}"
     commandLine += f" --model_args pretrained={model_name},trust_remote_code=True"
 
@@ -247,7 +273,8 @@ def main():
             # memorize
             if run_memorize( base_model_name, model_config, run_logging_folder, model_folder,
                              args.dataset,
-                             args.unmemorize_sample_count ) == False:
+                             args.unmemorize_sample_count,
+                             args.accelerate_run_config ) == False:
                 print(f"Error in memorize step")
                 return
             
@@ -257,7 +284,7 @@ def main():
             return
 
         if run_steps["benchmark-pretrained"] is False:
-            if run_benchmark( model_name, run_logging_folder ) == False:
+            if run_benchmark( model_name, run_logging_folder, args.accelerate_benchmark_config ) == False:
                 print(f"Error in benchmark step")
                 return
         return
@@ -301,7 +328,9 @@ def main():
                                     args.dataset, run_config["start"], run_config["stride"], run_config["span"],
                                     args.smart_stride, args.smart_select,
                                     args.unmemorize_sample_count,
-                                    args.top_k ) == False:
+                                    args.top_k,
+                                    args.loss_type,
+                                    args.accelerate_run_config ) == False:
                         print(f"[{run_number}] Error in unmemorize")        
                         break
                 else:
@@ -318,7 +347,7 @@ def main():
                 # run the benchmark step
                 if run_steps["benchmark"]:
                     print(f"\n[{run_number}] ************* Running benchmarks")
-                    if run_benchmark( run_model_folder, run_logging_folder ) == False:
+                    if run_benchmark( run_model_folder, run_logging_folder, args.accelerate_benchmark_config ) == False:
                         print(f"[{run_number}] Error in benchmark step")
                         break                                
                             

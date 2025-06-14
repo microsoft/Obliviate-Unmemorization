@@ -1,7 +1,0 @@
-{
-    "model_name": "llama3.1-8b",
-    "base_directory": "/datadrive2/unmemorize/experiments",
-    "synthetic_dataset": "data/synthetic100",
-    "pretrain_dataset": "data/organic",
-    "sample_count": 100
-}

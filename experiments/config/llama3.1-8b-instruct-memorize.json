@@ -3,5 +3,5 @@
     "base_directory": "/datadrive2/unmemorize/experiments",
     "synthetic_dataset": "data/synthetic",
     "pretrain_dataset": "data/organic/dataset",
-    "sample_count": 10
+    "sample_count": 100
   }

@@ -6,17 +6,25 @@ ROOT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 ORIGINAL_DIR="$(pwd)"
 CONFIG_ROOT="$ROOT_DIR/config"
 DEBUG=false
+ACCELERATE_RUN_CONFIG=""
+ACCELERATE_BENCHMARK_CONFIG=""
 
 # datasets
 SYNTHETIC_DATA="data/synthetic"
 SYNTHETIC_DATA100="data/synthetic100"
+NEWSQA_DATA="data/newsqa"
 PRETRAIN_DATA="data/organic/dataset"
 PRETRAIN_LABELS="data/organic/labels.txt"
+MUSENEWS_DATA="data/muse-news"
+MUSEBOOKS_DATA="data/muse-books"
+
 
 # Parse command line arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --debug) DEBUG=true ;;
+        --accelerate_run_config) ACCELERATE_RUN_CONFIG="$2"; shift ;;
+        --accelerate_benchmark_config) ACCELERATE_BENCHMARK_CONFIG="$2"; shift ;;
         *) CONFIG_FILE="$ORIGINAL_DIR/$1" ;;
     esac
     shift
@@ -29,6 +37,8 @@ if [ "$DEBUG" = true ]; then
     echo "ORIGINAL_DIR: $ORIGINAL_DIR"
     echo "CONFIG_ROOT: $CONFIG_ROOT"
     echo "CONFIG_FILE: $CONFIG_FILE"
+    echo "ACCELERATE_RUN_CONFIG: $ACCELERATE_RUN_CONFIG"
+    echo "ACCELERATE_BENCHMARK_CONFIG: $ACCELERATE_BENCHMARK_CONFIG"
     echo "======================="
     echo ""
 fi
@@ -64,6 +74,12 @@ get_dataset_path() {
         echo "$SYNTHETIC_DATA"
     elif [ "$dataset" = "synthetic100" ]; then
        echo "$SYNTHETIC_DATA100"
+    elif [ "$dataset" = "newsqa" ]; then
+        echo "$NEWSQA_DATA"
+    elif [ "$dataset" = "muse-news" ]; then
+        echo "$MUSENEWS_DATA"
+    elif [ "$dataset" = "muse-books" ]; then
+        echo "$MUSEBOOKS_DATA"
     else
         echo "$PRETRAIN_DATA"
     fi
@@ -85,10 +101,12 @@ run_experiment() {
     local config=$2
     local sample_count=$3
     local exp_type=$4
-    local smart_flag=$5
-    local dataset=$6
-    local base_dir=$7
-    local top_k=$8 
+    local smart_select_flag=$5
+    local smart_stride_flag=$6
+    local dataset=$7
+    local base_dir=$8
+    local top_k=$9
+    local loss_type=${10}
 
     local dataset_path=$(get_dataset_path "$dataset")
     
@@ -100,6 +118,21 @@ run_experiment() {
     echo "- Experiment Type: $exp_type"
     echo "- Dataset: $dataset"
     echo "- Top K: $top_k"
+    if [ -n "$loss_type" ]; then
+        echo "- Loss Type: $loss_type"
+    fi
+    if [ -n "$smart_select_flag" ]; then
+        echo "- Smart Select: enabled"
+    fi
+    if [ -n "$smart_stride_flag" ]; then
+        echo "- Smart Stride: enabled"
+    fi
+    if [ -n "$ACCELERATE_RUN_CONFIG" ]; then
+            echo "- Accelerate Config: $ACCELERATE_RUN_CONFIG"
+        fi
+    if [ -n "$ACCELERATE_BENCHMARK_CONFIG" ]; then
+            echo "- Accelerate Benchmark Config: $ACCELERATE_BENCHMARK_CONFIG"
+        fi
     echo "=================================================="
     
     local run_dir="$base_dir/$exp_type/$dataset/$model_name/$top_k/$config/0"
@@ -124,6 +157,29 @@ run_experiment() {
         python_model_folder=$(jq -r --arg model "$model_name" '.[$model].model_name' "$MODEL_CONFIG_FILE")
     fi
     
+    # Build accelerate config parameter if provided
+    local accelerate_run_config_param=""
+    if [ -n "$ACCELERATE_RUN_CONFIG" ]; then
+        accelerate_run_config_param="--accelerate_run_config \"$ACCELERATE_RUN_CONFIG\""
+    fi
+
+    local accelerate_benchmark_config_param=""
+    if [ -n "$ACCELERATE_BENCHMARK_CONFIG" ]; then
+        accelerate_benchmark_config_param="--accelerate_benchmark_config \"$ACCELERATE_BENCHMARK_CONFIG\""
+    fi
+    
+    # Build top_k parameter if provided
+    local top_k_param=""
+    if [ -n "$top_k" ] && [ "$top_k" != "null" ]; then
+        top_k_param="--top_k \"$top_k\""
+    fi
+    
+    # Build loss_type parameter if provided
+    local loss_type_param=""
+    if [ -n "$loss_type" ] && [ "$loss_type" != "null" ]; then
+        loss_type_param="--loss_type \"$loss_type\""
+    fi
+    
     local cmd="cd $ROOT_DIR && python ./src/unmemorizerun.py \
         --model_name \"$python_model_name\" \
         --logging_folder \"$logging_folder\" \
@@ -132,8 +188,12 @@ run_experiment() {
         --run_config \"$CONFIG_ROOT/runs/$config.json\" \
         --num_runs 1 \
         --unmemorize_sample_count \"$sample_count\" \
-        $([[ "$smart_flag" == "--smart_select" ]] && echo "--smart_select") \
-        $top_k_param"       
+        $smart_select_flag \
+        $smart_stride_flag \
+        $top_k_param \
+        $loss_type_param \
+        $accelerate_run_config_param \
+        $accelerate_benchmark_config_param"
     
     execute_command "$cmd"
     execute_command "cd $ORIGINAL_DIR"
@@ -147,10 +207,15 @@ generate_plots() {
     local dataset=$4
     local base_dir=$5
     local sample_count=$6
+    local top_k=$7
     
     local suffix=""
     if [ "$exp_type" == "smart" ]; then
         suffix=" (Smart)"
+    elif [ "$exp_type" == "stride" ]; then
+        suffix=" (Smart Stride)"
+    else 
+        suffix=" (Standard)"
     fi
     
     echo "Generating plots..."
@@ -172,25 +237,28 @@ generate_plots() {
         local pretrained_log="$parent_dir/$model_name/pretrained-pretrained/test.log"
         local pretrained_greedy_log="$parent_dir/$model_name/pretrained-pretrained/test_greedy.log"
         
-        flags="--pretrained \"$pretrained_log\" --sample-labels \"$PRETRAIN_LABELS\""
+        if [[ "$dataset" == "pretrained" ]]; then
+            # For newsqa, use the specific pretrained labels
+            flags="--pretrained \"$pretrained_log\" --sample-labels \"$PRETRAIN_LABELS\""
+        else
+            # For other datasets, just use the pretrained log
+            flags="--pretrained \"$pretrained_log\""
+        fi
         if [ -f "$pretrained_greedy_log" ]; then
             flags="$flags --pretrained_greedy \"$pretrained_greedy_log\""
         fi
     fi
     
     # For single sample experiments, use the runs_folder parameter
-    if [ "$sample_count" == "1" ]; then
-        local exp_dir="$base_dir/$exp_type/$dataset/$model_name/$top_k"
-        local cmd="cd $ROOT_DIR && python ./src/create_multisample_plots.py \
-            --runs_folder \"$exp_dir\" \
-            --output \"$exp_dir\" \
-            --title \"$model_name $dataset$suffix\" \
-            $flags"
-        
-        execute_command "$cmd"
-        execute_command "cd $ORIGINAL_DIR"
-        return
-    fi
+    local exp_dir="$base_dir/$exp_type/$dataset/$model_name/$top_k"
+    local cmd="cd $ROOT_DIR && python ./src/create_multisample_plots.py \
+        --runs_folder \"$exp_dir\" \
+        --output \"$exp_dir\" \
+        --title \"$model_name $dataset$suffix\" \
+        $flags"
+    
+    execute_command "$cmd"
+    execute_command "cd $ORIGINAL_DIR"
     
     # Multi-sample plot generation code
     # Add input file and its greedy version if it exists
@@ -246,13 +314,20 @@ jq -c '.experiments[]' "$CONFIG_FILE" | while read -r model; do
         echo "$config" | jq -c '.experiment_types[]' | while read -r exp_type; do
             EXP_NAME=$(echo "$exp_type" | jq -r '.name')
             SMART_SELECT=$(echo "$exp_type" | jq -r '.smart_select')
+            SMART_STRIDE=$(echo "$exp_type" | jq -r '.smart_stride')
             DATASET_TYPE=$(echo "$exp_type" | jq -r '.data')
             TOP_K=$(echo "$exp_type" | jq -r '.top_k // empty')
+            LOSS_TYPE=$(echo "$exp_type" | jq -r '.loss_type // empty')
 
-            # Set smart flag based on configuration
-            SMART_FLAG=""
+            # Set smart flags based on configuration
+            SMART_SELECT_FLAG=""
             if [ "$SMART_SELECT" = "true" ]; then
-                SMART_FLAG="--smart_select"
+                SMART_SELECT_FLAG="--smart_select"
+            fi
+            
+            SMART_STRIDE_FLAG=""
+            if [ "$SMART_STRIDE" = "true" ]; then
+                SMART_STRIDE_FLAG="--smart_stride"
             fi
             
             run_experiment \
@@ -260,10 +335,12 @@ jq -c '.experiments[]' "$CONFIG_FILE" | while read -r model; do
                 "$CONFIG" \
                 "$SAMPLE_COUNT" \
                 "$EXP_NAME" \
-                "$SMART_FLAG" \
+                "$SMART_SELECT_FLAG" \
+                "$SMART_STRIDE_FLAG" \
                 "$DATASET_TYPE" \
                 "$BASE_DIR" \
-                "$TOP_K"
+                "$TOP_K" \
+                "$LOSS_TYPE"
                 
             generate_plots \
                             "$MODEL_NAME" \
@@ -271,7 +348,8 @@ jq -c '.experiments[]' "$CONFIG_FILE" | while read -r model; do
                             "$EXP_NAME" \
                             "$DATASET_TYPE" \
                             "$BASE_DIR" \
-                            "$SAMPLE_COUNT" 
+                            "$SAMPLE_COUNT" \
+                            "$TOP_K"
                 
             echo ""
         done

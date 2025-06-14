@@ -52,5 +52,23 @@
       "model_name": "01-ai/Yi-1.5-6B",
       "gradient_accumulation_steps": "6",
       "per_device_batch_size": "2"
+    },
+    "llama2-7b-newsqa": {
+      "model_name": "swj0419/llama2-7b_chat_newsqa",
+      "tokenizer": "meta-llama/Llama-2-7b-chat-hf",
+      "gradient_accumulation_steps": "6",
+      "instruct": true
+    },
+    "muse-news_target": {
+      "model_name": "muse-bench/MUSE-news_target",  
+      "tokenizer": "meta-llama/Llama-2-7b",
+      "gradient_accumulation_steps": "6",
+      "per_device_batch_size": "2"
+    },
+    "muse-books_target": {
+      "model_name": "muse-bench/muse-books_target",
+      "tokenizer": "meta-llama/Llama-2-7b",
+      "gradient_accumulation_steps": "6",
+      "per_device_batch_size": "2"
     }
   }

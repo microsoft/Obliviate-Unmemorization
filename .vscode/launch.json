@@ -1,0 +1,74 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Create Multisample Plots",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/create_multisample_plots.py",
+            "args": [
+                //"--input", "/datadrive2/unmemorize/experiments/6/standard/newsqa/llama2-7b-newsqa//10-5-1/0/test.log",
+                //"--input_greedy", "/datadrive2/unmemorize/experiments/6/standard/newsqa/llama2-7b-newsqa//10-5-1/0/test_greedy.log",
+                //"--output", "/datadrive2/unmemorize/experiments/6/standard/newsqa/llama2-7b-newsqa/",
+                //"--title", "llama2-7b-newsqa newsqa",
+                //"--pretrained", "/datadrive2/unmemorize/experiments/llama2-7b-newsqa/pretrained-pretrained/test.log",
+                //"--pretrained_greedy", "/datadrive2/unmemorize/experiments/llama2-7b-newsqa/pretrained-pretrained/test_greedy.log"
+
+                //"--input", "/datadrive2/unmemorize/experiments/1/standard/synthetic/llama3.1-8b/10/10-5-1/0/test.log",
+                //"--input_greedy", "/datadrive2/unmemorize/experiments/1/standard/synthetic/llama3.1-8b/10/10-5-1/0/test_greedy.log",
+                //"--runs_folder", "/datadrive2/unmemorize/experiments/2/standard/synthetic/llama3.1-8b/",
+                "--input", "/datadrive2/unmemorize/experiments/4/smart/pretrain/llama3.1-8b/10/10-4-1/0/test.log",
+                "--input_greedy", "/datadrive2/unmemorize/experiments/4/smart/pretrain/llama3.1-8b/10/10-4-1/0/test_greedy.log",
+                "--output", " /datadrive2/unmemorize/experiments/4/smart/pretrain/llama3.1-8b/10/10-4-1/",
+                "--title", "llama3.1 organic",
+                "--pretrained", "/datadrive2/unmemorize/experiments/llama3.1-8b/pretrained-pretrained/test.log",
+                "--pretrained_greedy", "/datadrive2/unmemorize/experiments/llama3.1-8b/pretrained-pretrained/test_greedy.log"
+
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/test.py",
+            "args": [
+                "--model", "/datadrive2/unmemorize/experiments/4/standard/synthetic/llama3.1-8b-instruct/10/10-4-1/0",
+                "--logging_folder", "/datadrive2/unmemorize/experiments/4/standard/synthetic/llama3.1-8b-instruct/10/10-4-1/0",
+                "--sample_count", "100",
+                "--dataset", "data/synthetic"
+            ],
+        },
+        {
+            "name": "Unemorize finetuning - Llama3 8b",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "src/finetune.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--unmemorize",
+                "--model_name_or_path", "/datadrive2/unmemorize/experiments/llama3.1-8b/memorized/model",
+                //"--model_name", "meta-llama/Llama-3.1-8B",
+                "--dataset_name", "data/synthetic",
+                //"--dataset_name", "generatingData/harryPotter/dataset",
+                "--output_dir", "/datadrive2/unmemorize/llama3-8b/10-5-1/0",
+                "--logfile", "/datadrive2/unmemorize/llama3-8b/10-5-1/0/unmemorize.log",
+                "--validation_split_percentage", "0",
+                "--gradient_accumulation_steps", "8",
+                "--per_device_train_batch_size", "1",
+                "--num_train_epochs", "100",
+                "--unmemorize_start", "4",
+                "--unmemorize_stride", "4",
+                "--unmemorize_span", "1",
+                "--unmemorize_sample_count","1",
+                "--unmemorize_smart_stride",
+                "--unmemorize_smart_select"
+            ]
+        },                    
+    ]
+}

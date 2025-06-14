@@ -97,7 +97,7 @@ cd src
 ```
 The script stores unmemorized models, benchmark results and test logs under <base_directory>/{smart/standard}/{synthetic/pretrain}/{model name]/{run config}/0
 
-For exaample, the example above would put the 10-0-1 run here: 
+The example above would put the 10-0-1 run here: 
 ```bash
 /datadrive2/unmemorize/experiments/2/standard/synthetic/10-5-1/0
 ```

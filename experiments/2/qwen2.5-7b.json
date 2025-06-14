@@ -5,8 +5,24 @@
       "model_name": "qwen2.5-7b",
       "configurations": [
         {
+          "config": "10-0-1",
+          "sample_count": 10,
+          "experiment_types": [
+            {
+              "data": "synthetic",
+              "name": "standard",
+              "smart_select": false
+            },
+            {
+              "data": "pretrain",
+              "name": "standard",
+              "smart_select": false
+            }                            
+          ]
+        },        
+        {
           "config": "10-1-1",
-          "sample_count": 1,
+          "sample_count": 10,
           "experiment_types": [
             {
               "data": "synthetic",
@@ -22,7 +38,7 @@
         },
         {
           "config": "10-2-1",
-          "sample_count": 1,
+          "sample_count": 10,
           "experiment_types": [
             {
               "data": "synthetic",
@@ -37,8 +53,40 @@
           ]
         },
         {
+          "config": "10-3-1",
+          "sample_count": 10,
+          "experiment_types": [
+            {
+              "data": "synthetic",
+              "name": "standard",
+              "smart_select": false
+            },
+            {
+              "data": "pretrain",
+              "name": "standard",
+              "smart_select": false
+            }                            
+          ]
+        },
+        {
+          "config": "10-4-1",
+          "sample_count": 10,
+          "experiment_types": [
+            {
+              "data": "synthetic",
+              "name": "standard",
+              "smart_select": false
+            },
+            {
+              "data": "pretrain",
+              "name": "standard",
+              "smart_select": false
+            }                            
+          ]
+        },                
+        {
           "config": "10-5-1",
-          "sample_count": 1,
+          "sample_count": 10,
           "experiment_types": [
             {
               "data": "synthetic",
@@ -54,7 +102,7 @@
         },
         {
           "config": "10-10-1",
-          "sample_count": 1,
+          "sample_count": 10,
           "experiment_types": [
             {
               "data": "synthetic",
@@ -70,7 +118,7 @@
         },
         {
           "config": "10-20-1",
-          "sample_count": 1,
+          "sample_count": 10,
           "experiment_types": [
             {
               "data": "synthetic",
@@ -86,7 +134,7 @@
         },
         {
           "config": "10-50-1",
-          "sample_count": 1,
+          "sample_count": 10,
           "experiment_types": [
             {
               "data": "synthetic",

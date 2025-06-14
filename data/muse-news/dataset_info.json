@@ -1,0 +1,68 @@
+{
+  "builder_name": "parquet",
+  "citation": "",
+  "config_name": "raw",
+  "dataset_name": "muse-news",
+  "dataset_size": 25271100,
+  "description": "",
+  "download_checksums": {
+    "hf://datasets/muse-bench/MUSE-News@506bd5b150b92814d45e4404a82f120ab2d748bf/raw/retain2-00000-of-00001.parquet": {
+      "num_bytes": 3746270,
+      "checksum": null
+    },
+    "hf://datasets/muse-bench/MUSE-News@506bd5b150b92814d45e4404a82f120ab2d748bf/raw/forget-00000-of-00001.parquet": {
+      "num_bytes": 1926120,
+      "checksum": null
+    },
+    "hf://datasets/muse-bench/MUSE-News@506bd5b150b92814d45e4404a82f120ab2d748bf/raw/retain1-00000-of-00001.parquet": {
+      "num_bytes": 3729667,
+      "checksum": null
+    },
+    "hf://datasets/muse-bench/MUSE-News@506bd5b150b92814d45e4404a82f120ab2d748bf/raw/holdout-00000-of-00001.parquet": {
+      "num_bytes": 5479228,
+      "checksum": null
+    }
+  },
+  "download_size": 14881285,
+  "features": {
+    "article": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 40152385,
+  "splits": {
+    "retain2": {
+      "name": "retain2",
+      "num_bytes": 6437312,
+      "num_examples": 1778,
+      "dataset_name": "muse-news"
+    },
+    "forget": {
+      "name": "forget",
+      "num_bytes": 3281546,
+      "num_examples": 889,
+      "dataset_name": "muse-news"
+    },
+    "retain1": {
+      "name": "retain1",
+      "num_bytes": 6456895,
+      "num_examples": 1777,
+      "dataset_name": "muse-news"
+    },
+    "holdout": {
+      "name": "holdout",
+      "num_bytes": 9095347,
+      "num_examples": 3043,
+      "dataset_name": "muse-news"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}
